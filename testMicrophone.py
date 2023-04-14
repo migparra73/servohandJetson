@@ -43,7 +43,7 @@ SAMPLING_RATE = 7200
 DURATION = 20 #seconds
 TOTAL_SAMPLES = SAMPLING_RATE * DURATION
 
-recBuf = np.zeros((TOTAL_SAMPLES), dtype=np.float32)
+recBuf = np.zeros((TOTAL_SAMPLES+1), dtype=np.float32)
 timePlot = np.linspace(-20, 0, TOTAL_SAMPLES)
 recBufIdx = int(0)
 
@@ -53,38 +53,44 @@ def signal_handler(signum, frame):
         process.terminate()
 
 def runMotors(packetHandler, getch, portHandler):
-    currentId = int(input("Motor to control: "))
-    position = int(input("Position to set: "))
+    while 1:
+        print("Press any key to continue! (or press ESC to quit!)")
+        if getch() == chr(0x1b):
+            break
 
-    dxl_comm_result, dxl_error = packetHandler.write1ByteTxRx(portHandler, currentId, ADDR_TORQUE_ENABLE, TORQUE_ENABLE)
-    if dxl_comm_result != COMM_SUCCESS:
-        print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
-    elif dxl_error != 0:
-        print("%s" % packetHandler.getRxPacketError(dxl_error))
-    else:
-        print("Dynamixel has been successfully connected")
+        currentId = int(input("Motor to control: "))
+        position = int(input("Position to set: "))
 
-    dxl_comm_result, dxl_error = packetHandler.write4ByteTxRx(portHandler, currentId, ADDR_GOAL_POSITION, position)
-    if dxl_comm_result != COMM_SUCCESS:
-        print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
-    elif dxl_error != 0:
-        print("%s" % packetHandler.getRxPacketError(dxl_error))
-    else:
-        print("Position successfully sent")
-    
-    print("Press key to continue")
-    getch()
-    # Disable Dynamixel Torque
-    dxl_comm_result, dxl_error = packetHandler.write1ByteTxRx(portHandler, currentId, ADDR_TORQUE_ENABLE, TORQUE_DISABLE)
-    if dxl_comm_result != COMM_SUCCESS:
-        print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
-    elif dxl_error != 0:
-        print("%s" % packetHandler.getRxPacketError(dxl_error))
+        dxl_comm_result, dxl_error = packetHandler.write1ByteTxRx(portHandler, currentId, ADDR_TORQUE_ENABLE, TORQUE_ENABLE)
+        if dxl_comm_result != COMM_SUCCESS:
+            print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
+        elif dxl_error != 0:
+            print("%s" % packetHandler.getRxPacketError(dxl_error))
+        else:
+            print("Dynamixel has been successfully connected")
+
+        dxl_comm_result, dxl_error = packetHandler.write4ByteTxRx(portHandler, currentId, ADDR_GOAL_POSITION, position)
+        if dxl_comm_result != COMM_SUCCESS:
+            print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
+        elif dxl_error != 0:
+            print("%s" % packetHandler.getRxPacketError(dxl_error))
+        else:
+            print("Position successfully sent")
+
+        print("Press key to continue")
+        getch()
+        # Disable Dynamixel Torque
+        dxl_comm_result, dxl_error = packetHandler.write1ByteTxRx(portHandler, currentId, ADDR_TORQUE_ENABLE, TORQUE_DISABLE)
+        if dxl_comm_result != COMM_SUCCESS:
+            print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
+        elif dxl_error != 0:
+            print("%s" % packetHandler.getRxPacketError(dxl_error))
 
 def getADC(ADC, channelList):
-    recBuf[recBufIdx] = ADC.ADS1263_GetChannalValue(int(0))    # get ADC1 value
-    recBufIdx += 1
-    recBufIdx = recBufIdx % TOTAL_SAMPLES
+    while 1:
+        recBuf[recBufIdx] = ADC.ADS1263_GetChannalValue(int(0))    # get ADC1 value
+        recBufIdx += 1
+        recBufIdx = recBufIdx % TOTAL_SAMPLES
 
     
 def main():
@@ -143,17 +149,16 @@ def main():
 
 
     currentId = 1
-    while 1:
-        print("Press any key to continue! (or press ESC to quit!)")
-        if getch() == chr(0x1b):
-            break
-        p1 = multiprocessing.Process(target=runMotors, args=(packetHandler, getch, portHandler))
-        p2 = multiprocessing.Process(target=getADC, args=(ADC, channelList))
-        p1.start()
-        p2.start()
-        p1.join()
-        p2.join()
-        np.savetxt("record.csv", recBuf, delimiter = ",")
+    #p1 = multiprocessing.Process(target=runMotors, args=(packetHandler, getch, portHandler))
+    p1 = multiprocessing.Process(target=getADC, args=(ADC, channelList))
+    p1.start()
+    #p2.start()
+    runMotors(packetHandler, getch, portHandler)
+    p1.join()
+    #p2.join()
+    recBuf[-1] = recBufIdx # last index of the circular buffer
+    np.savetxt("record.csv", recBuf, delimiter = ",")
+        
 
 if __name__ == "__main__":
     main()
