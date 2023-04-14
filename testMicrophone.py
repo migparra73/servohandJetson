@@ -1,22 +1,10 @@
 import os
 import time
 import numpy
+import ADS1263
+import RPi.GPIO as GPIO
 
-if os.name == 'nt':
-    import msvcrt
-    def getch():
-        return msvcrt.getch().decode()
-else:
-    import sys, tty, termios
-    fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(fd)
-    def getch():
-        try:
-            tty.setraw(sys.stdin.fileno())
-            ch = sys.stdin.read(1)
-        finally:
-            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-        return ch
+REF = 5.08          # Modify according to actual voltage
 
 from dynamixel_sdk import * # Uses Dynamixel SDK library
 
@@ -47,43 +35,8 @@ index = 0
 dxl_goal_position = [DXL_MINIMUM_POSITION_VALUE, DXL_MAXIMUM_POSITION_VALUE]         # Goal position
 dxl_ids = [3, 4]
 
-# Initialize PortHandler instance
-# Set the port path
-# Get methods and members of PortHandlerLinux or PortHandlerWindows
-portHandler = PortHandler(DEVICENAME)
 
-# Initialize PacketHandler instance
-# Set the protocol version
-# Get methods and members of Protocol1PacketHandler or Protocol2PacketHandler
-packetHandler = PacketHandler(PROTOCOL_VERSION)
-
-
-# Open port
-if portHandler.openPort():
-    print("Succeeded to open the port")
-else:
-    print("Failed to open the port")
-    print("Press any key to terminate...")
-    getch()
-    quit()
-
-
-# Set port baudrate
-if portHandler.setBaudRate(BAUDRATE):
-    print("Succeeded to change the baudrate")
-else:
-    print("Failed to change the baudrate")
-    print("Press any key to terminate...")
-    getch()
-    quit()
-
-
-currentId = 1
-while 1:
-    print("Press any key to continue! (or press ESC to quit!)")
-    if getch() == chr(0x1b):
-        break
-    
+def runMotors(packetHandler, getch, portHandler):
     currentId = int(input("Motor to control: "))
     position = int(input("Position to set: "))
 
@@ -111,3 +64,73 @@ while 1:
         print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
     elif dxl_error != 0:
         print("%s" % packetHandler.getRxPacketError(dxl_error))
+
+def getADC(ADC, channelList):
+    ADC_Value = ADC.ADS1263_GetChannalValue(0)    # get ADC1 value
+    
+def main():
+
+    if os.name == 'nt':
+        import msvcrt
+        def getch():
+            return msvcrt.getch().decode()
+    else:
+        import sys, tty, termios
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        def getch():
+            try:
+                tty.setraw(sys.stdin.fileno())
+                ch = sys.stdin.read(1)
+            finally:
+                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+            return ch
+
+    # Initialize PortHandler instance
+    # Set the port path
+    # Get methods and members of PortHandlerLinux or PortHandlerWindows
+    portHandler = PortHandler(DEVICENAME)
+
+    # Initialize PacketHandler instance
+    # Set the protocol version
+    # Get methods and members of Protocol1PacketHandler or Protocol2PacketHandler
+    packetHandler = PacketHandler(PROTOCOL_VERSION)
+
+    ADC = ADS1263.ADS1263()
+    if (ADC.ADS1263_init_ADC1('ADS1263_38400SPS') == -1):
+        exit()
+    ADC.ADS1263_SetMode(0) # 0 is singleChannel, 1 is diffChannel
+
+    channelList = [0, 1, 2, 3, 4]  # The channel must be less than 10
+
+    # Open port
+    if portHandler.openPort():
+        print("Succeeded to open the port")
+    else:
+        print("Failed to open the port")
+        print("Press any key to terminate...")
+        getch()
+        quit()
+
+
+    # Set port baudrate
+    if portHandler.setBaudRate(BAUDRATE):
+        print("Succeeded to change the baudrate")
+    else:
+        print("Failed to change the baudrate")
+        print("Press any key to terminate...")
+        getch()
+        quit()
+
+
+    currentId = 1
+    while 1:
+        print("Press any key to continue! (or press ESC to quit!)")
+        if getch() == chr(0x1b):
+            break
+        runMotors()
+
+if __name__ == "__main__":
+    main()
+    
+
