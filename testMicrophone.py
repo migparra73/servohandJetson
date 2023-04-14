@@ -86,7 +86,7 @@ def runMotors(packetHandler, getch, portHandler):
         elif dxl_error != 0:
             print("%s" % packetHandler.getRxPacketError(dxl_error))
 
-def getADC(ADC, channelList):
+def getADC(ADC, channelList, recBuf, redBufIdx):
     while 1:
         recBuf[recBufIdx] = ADC.ADS1263_GetChannalValue(int(0))    # get ADC1 value
         recBufIdx += 1
@@ -150,7 +150,7 @@ def main():
 
     currentId = 1
     #p1 = multiprocessing.Process(target=runMotors, args=(packetHandler, getch, portHandler))
-    p1 = multiprocessing.Process(target=getADC, args=(ADC, channelList))
+    p1 = multiprocessing.Process(target=getADC, args=(ADC, channelList, recBuf, recBufIdx))
     p1.start()
     #p2.start()
     runMotors(packetHandler, getch, portHandler)
