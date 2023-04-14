@@ -3,6 +3,10 @@ import time
 import numpy
 import ADS1263
 import RPi.GPIO as GPIO
+import multiprocessing
+import numpy as np
+import signal
+
 
 REF = 5.08          # Modify according to actual voltage
 
@@ -35,6 +39,18 @@ index = 0
 dxl_goal_position = [DXL_MINIMUM_POSITION_VALUE, DXL_MAXIMUM_POSITION_VALUE]         # Goal position
 dxl_ids = [3, 4]
 
+SAMPLING_RATE = 7200
+DURATION = 20 #seconds
+TOTAL_SAMPLES = SAMPLING_RATE * DURATION
+
+recBuf = np.zeros((TOTAL_SAMPLES), dtype=np.float32)
+timePlot = np.linspace(-20, 0, TOTAL_SAMPLES)
+recBufIdx = int(0)
+
+def signal_handler(signum, frame):
+    # signal handler function to terminate child processes gracefully
+    for process in multiprocessing.active_children():
+        process.terminate()
 
 def runMotors(packetHandler, getch, portHandler):
     currentId = int(input("Motor to control: "))
@@ -66,10 +82,13 @@ def runMotors(packetHandler, getch, portHandler):
         print("%s" % packetHandler.getRxPacketError(dxl_error))
 
 def getADC(ADC, channelList):
-    ADC_Value = ADC.ADS1263_GetChannalValue(0)    # get ADC1 value
+    recBuf[recBufIdx] = ADC.ADS1263_GetChannalValue(int(0))    # get ADC1 value
+    recBufIdx += 1
+    recBufIdx = recBufIdx % TOTAL_SAMPLES
+
     
 def main():
-
+    signal.signal(signal.SIGINT, signal_handler)
     if os.name == 'nt':
         import msvcrt
         def getch():
@@ -97,7 +116,7 @@ def main():
     packetHandler = PacketHandler(PROTOCOL_VERSION)
 
     ADC = ADS1263.ADS1263()
-    if (ADC.ADS1263_init_ADC1('ADS1263_38400SPS') == -1):
+    if (ADC.ADS1263_init_ADC1('ADS1263_7200SPS') == -1):
         exit()
     ADC.ADS1263_SetMode(0) # 0 is singleChannel, 1 is diffChannel
 
@@ -128,7 +147,13 @@ def main():
         print("Press any key to continue! (or press ESC to quit!)")
         if getch() == chr(0x1b):
             break
-        runMotors()
+        p1 = multiprocessing.Process(target=runMotors, args=(packetHandler, getch, portHandler))
+        p2 = multiprocessing.Process(target=getADC, args=(ADC, channelList))
+        p1.start()
+        p2.start()
+        p1.join()
+        p2.join()
+        np.savetxt("record.csv", recBuf, delimiter = ",")
 
 if __name__ == "__main__":
     main()
