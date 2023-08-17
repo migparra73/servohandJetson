@@ -289,4 +289,5 @@ class Servo:
         print("Successfully factory reset")
 
     def setSliderPosition(self, positionRatio):
-        self.adafruitKit.continuous_servo[0].fraction = positionRatio
+        tmp = 0.78*positionRatio + 0.22 # Linear mapping since an input below 0.22 doesn't really do anything.
+        self.adafruitKit.continuous_servo[0].fraction = tmp
