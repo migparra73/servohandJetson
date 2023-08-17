@@ -4,6 +4,10 @@ import numpy
 
 import dynamixel_sdk as Dynamixel # Uses Dynamixel SDK library
 
+import busio
+import board
+from adafruit_servokit import ServoKit
+
 class Servo:
     portHandler = None
     packetHandler = None
@@ -11,6 +15,13 @@ class Servo:
     groupSyncWriteVelocity = None
     groupSyncReadPosition = None
     groupSyncReadVelocity = None
+
+    i2c_bus1 = None
+    adafruitKit = None
+
+    sclPort = None
+    sdaPort = None
+
 
     ADDR_TORQUE_ENABLE          = 64
     ADDR_DRIVE_MODE             = 10
@@ -32,6 +43,9 @@ class Servo:
                                                 # 0x01 : reset all values except ID
                                                 # 0x02 : reset all values except ID and baudrate
 
+    SLIDER_MINIMUM_PWM_PULSE    = 1000
+    SLIDER_MAXIMUM_PWM_PULSE    = 2000
+
 
     # DYNAMIXEL Protocol Version (1.0 / 2.0)
     # https://emanual.robotis.com/docs/en/dxl/protocol2/
@@ -48,7 +62,7 @@ class Servo:
     TORQUE_DISABLE              = 0     # Value for disabling the torque
     DXL_MOVING_STATUS_THRESHOLD = 20    # Dynamixel moving status threshold
 
-    def __init__(self, deviceName=DEVICENAME, protoVersion=PROTOCOL_VERSION, baudRate = BAUDRATE):
+    def __init__(self, deviceName=DEVICENAME, protoVersion=PROTOCOL_VERSION, baudRate = BAUDRATE, sclPort = board.SCL, sdaPort = board.SDA):
         # Initialize PortHandler instance
         # Set the port path
         # Get methods and members of PortHandlerLinux or PortHandlerWindows
@@ -80,6 +94,19 @@ class Servo:
         else:
             print("Failed to change the baudrate")
             quit()
+
+        # On the Jetson Nano
+        # Bus 0 (pins 28,27) is board SCL_1, SDA_1 in the jetson board definition file
+        # Bus 1 (pins 5, 3) is board SCL, SDA in the jetson definition file
+        # Default is to Bus 1; We are using Bus 0, so we need to construct the busio first ...
+        print("Initializing Servos")
+        self.sclPort = sclPort
+        self.sdaPort = sdaPort
+        self.i2c_bus1=(busio.I2C(self.sclPort, self.sdaPort))
+        print("Initializing ServoKit")
+        self.adafruitKit = ServoKit(channels=16, i2c=self.i2c_bus1)
+        self.adafruitKit.continuous_servo[0].set_pulse_width_range(self.SLIDER_MINIMUM_PWM_PULSE, self.SLIDER_MAXIMUM_PWM_PULSE)
+        print("Slider initialized.")
 
     # Default is velocity drive mode.
     def setDriveMode(self, servoId, driveMode = VELOCITY_DRIVE_MODE):
@@ -260,3 +287,6 @@ class Servo:
         elif dxl_error != 0:
             print("%s" % self.packetHandler.getRxPacketError(dxl_error))
         print("Successfully factory reset")
+
+    def setSliderPosition(self, positionRatio):
+        self.adafruitKit.continuous_servo[0].fraction = positionRatio
