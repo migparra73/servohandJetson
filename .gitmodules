@@ -4,3 +4,6 @@
 [submodule "ServoKit"]
 	path = ServoKit
 	url = git@github.com:JetsonHacksNano/ServoKit.git
+[submodule "jetson-gpio"]
+	path = jetson-gpio
+	url = git@github.com:NVIDIA/jetson-gpio.git
