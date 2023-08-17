@@ -16,6 +16,8 @@ class Servo:
     ADDR_DRIVE_MODE             = 10
     VELOCITY_DRIVE_MODE         = 0
     TIME_DRIVE_MODE             = 4
+    NORMAL_ROTATION_DIRECTION   = 0
+    REVERSE_ROTATION_DIRECTION  = 1
     
     ADDR_GOAL_POSITION          = 116
     ADDR_PRESENT_POSITION       = 132
@@ -62,8 +64,8 @@ class Servo:
         self.groupSyncWriteVelocity = Dynamixel.GroupSyncWrite(self.portHandler, self.packetHandler, self.ADDR_PROFILE_VELOCITY, 4)
 
         # Initialize GroupSyncWrite instances
-        self.groupSyncReadPosition = Dynamixel.GroupSyncRead(self.portHandler, self.packetHandler, self.ADDR_GOAL_POSITION, 4)     
-        self.groupSyncReadVelocity = Dynamixel.GroupSyncRead(self.portHandler, self.packetHandler, self.ADDR_PROFILE_VELOCITY, 4)
+        self.groupSyncReadPosition = Dynamixel.GroupSyncRead(self.portHandler, self.packetHandler, self.ADDR_PRESENT_POSITION, 4)     
+        self.groupSyncReadVelocity = Dynamixel.GroupSyncRead(self.portHandler, self.packetHandler, self.ADDR_PRESENT_VELOCITY, 4)
 
         # Open port
         if self.portHandler.openPort():
@@ -82,6 +84,12 @@ class Servo:
     # Default is velocity drive mode.
     def setDriveMode(self, servoId, driveMode = VELOCITY_DRIVE_MODE):
         dxl_comm_result, dxl_error = self.packetHandler.write1ByteTxRx(self.portHandler, servoId, self.ADDR_DRIVE_MODE, driveMode)
+        if dxl_comm_result != Dynamixel.COMM_SUCCESS:
+            print("%s" % self.packetHandler.getTxRxResult(dxl_comm_result))
+        elif dxl_error != 0:
+            print("%s" % self.packetHandler.getRxPacketError(dxl_error))
+        else:
+            print("Drive mode has been successfully set")
 
     def enableServo(self, servoId):
         dxl_comm_result, dxl_error = self.packetHandler.write1ByteTxRx(self.portHandler, servoId, self.ADDR_TORQUE_ENABLE, self.TORQUE_ENABLE)
@@ -116,7 +124,8 @@ class Servo:
     def setServoAngleMultiple(self, servoIds, angles):
         assert(len(servoIds) == len(angles))
         for idx, servoId in enumerate(servoIds):
-            dxl_addparam_result = self.groupSyncWritePosition.addParam(servoId, [Dynamixel.DXL_LOBYTE(Dynamixel.DXL_LOWORD(angles[idx])), Dynamixel.DXL_HIBYTE(Dynamixel.DXL_LOWORD(angles[idx]))])
+            dxl_addparam_result = self.groupSyncWritePosition.addParam(servoId, [Dynamixel.DXL_LOBYTE(Dynamixel.DXL_LOWORD(angles[idx])), Dynamixel.DXL_HIBYTE(Dynamixel.DXL_LOWORD(angles[idx])), \
+                                                                                 Dynamixel.DXL_LOBYTE(Dynamixel.DXL_HIWORD(angles[idx])), Dynamixel.DXL_HIBYTE(Dynamixel.DXL_HIWORD(angles[idx]))])
             if dxl_addparam_result != True:
                 print("[ID:%03d] groupSyncWrite addparam failed, retry" % idx)
                 return False
@@ -130,28 +139,35 @@ class Servo:
 
     def getServoAngleMultiple(self, servoIds):
         # Syncread present position
+        allReadsIn = None
+        returnedDataArray = [-1] * len(servoIds)
+        retries = 0
+        
+        for servoId in servoIds:
+            dxl_addparam_result = self.groupSyncReadPosition.addParam(servoId)
+            if dxl_addparam_result != True:
+                print("Failed to add id %d to be read" % servoId)
+            else:
+                print("Adding servo %d to be read from " % servoId)
+        
         dxl_comm_result = self.groupSyncReadPosition.txRxPacket()
         if dxl_comm_result != Dynamixel.COMM_SUCCESS:
             print("%s" % self.packetHandler.getTxRxResult(dxl_comm_result))
 
-        allReadsIn = None
-        returnedDataArray = [None] * len(servoIds)
-        while allReadsIn != True:
-            allReadsIn = True
-            for idx, servoId in enumerate(servoIds):
-                dxl_getdata_result = self.groupSyncReadPosition.isAvailable(servoId, self.ADDR_PRESENT_POSITION, 4)
-                if dxl_getdata_result == True:
-                    returnedDataArray[idx] = self.groupSyncReadPosition.getData(servoId, self.ADDR_GOAL_POSITION, 4)
-                    servoIds.pop(idx) # remove yourself from the list if you are done.
-                elif dxl_getdata_result == False:
-                    allReadsIn = False
+        for idx, servoId in enumerate(servoIds):
+            dxl_getdata_result = self.groupSyncReadPosition.isAvailable(servoId, self.ADDR_PRESENT_POSITION, 4)
+            if dxl_getdata_result == True:
+                returnedDataArray[idx] = self.groupSyncReadPosition.getData(servoId, self.ADDR_GOAL_POSITION, 4)
+            else:
+                print("Servo getServoAngleMultiple: Something is wrong")
         self.groupSyncReadPosition.clearParam()
         return returnedDataArray
 
     def setServoVelocityMultiple(self, servoIds, velocities):
         assert(len(servoIds) == len(velocities))
         for idx, servoId in enumerate(servoIds):
-            dxl_addparam_result = self.groupSyncWriteVelocity.addParam(servoId, [Dynamixel.DXL_LOBYTE(Dynamixel.DXL_LOWORD(velocities[idx])), Dynamixel.DXL_HIBYTE(Dynamixel.DXL_LOWORD(velocities[idx]))])
+            dxl_addparam_result = self.groupSyncWriteVelocity.addParam(servoId, [Dynamixel.DXL_LOBYTE(Dynamixel.DXL_LOWORD(velocities[idx])), Dynamixel.DXL_HIBYTE(Dynamixel.DXL_LOWORD(velocities[idx])), \
+                                                                                 Dynamixel.DXL_LOBYTE(Dynamixel.DXL_HIWORD(velocities[idx])), Dynamixel.DXL_HIBYTE(Dynamixel.DXL_HIWORD(velocities[idx]))])
             if dxl_addparam_result != True:
                 print("[ID:%03d] groupSyncWrite addparam failed, retry" % idx)
                 return False
@@ -166,20 +182,21 @@ class Servo:
 
     def getServoVelocityMultiple(self, servoIds):
         # Syncread present position
-        allReadsIn = None
         returnedDataArray = [None] * len(servoIds)
+        for servoId in servoIds:
+            dxl_addparam_result = self.groupSyncReadVelocity.addParam(servoId)
+            if dxl_addparam_result != True:
+                print("Failed to add id %d to be read" % servoId)
+        
         dxl_comm_result = self.groupSyncReadVelocity.txRxPacket()
         if dxl_comm_result != Dynamixel.COMM_SUCCESS:
             print("%s" % self.packetHandler.getTxRxResult(dxl_comm_result))
-        while allReadsIn != True:
-            allReadsIn = True
-            for idx, servoId in enumerate(servoIds):
-                dxl_getdata_result = self.groupSyncReadVelocity.isAvailable(servoId, self.ADDR_PRESENT_POSITION, 4)
-                if dxl_getdata_result == True:
-                    returnedDataArray[idx] = self.groupSyncReadVelocity.getData(servoId, self.ADDR_GOAL_POSITION, 4)
-                    servoIds.pop(idx) # remove yourself from the list if you are done.
-                elif dxl_getdata_result == False:
-                    allReadsIn = False
+        for idx, servoId in enumerate(servoIds):
+            dxl_getdata_result = self.groupSyncReadVelocity.isAvailable(servoId, self.ADDR_PRESENT_VELOCITY, 4)
+            if dxl_getdata_result == True:
+                returnedDataArray[idx] = self.groupSyncReadVelocity.getData(servoId, self.ADDR_PRESENT_VELOCITY, 4)
+            else:
+                print("Somthing is wrong - get servo velocity multiple")
         self.groupSyncReadPosition.clearParam()
         return returnedDataArray
 
