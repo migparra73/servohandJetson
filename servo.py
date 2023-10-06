@@ -62,7 +62,15 @@ class Servo:
     TORQUE_DISABLE              = 0     # Value for disabling the torque
     DXL_MOVING_STATUS_THRESHOLD = 20    # Dynamixel moving status threshold
 
-    def __init__(self, deviceName=DEVICENAME, protoVersion=PROTOCOL_VERSION, baudRate = BAUDRATE, sclPort = board.SCL, sdaPort = board.SDA):
+    STEP_SIZE_IN_DEGREES = 1
+    PULSES_PER_DEGREE_POSITION_CONTROL_MODE = 11
+
+    _STEP_SIZE_IN_PULSES = STEP_SIZE_IN_DEGREES * PULSES_PER_DEGREE_POSITION_CONTROL_MODE
+
+    currentServoAngle = numpy.zeros(6)
+    currentLinearActuatorPosition = numpy.zeros(1)
+
+    def __init__(self, deviceName=DEVICENAME, protoVersion=PROTOCOL_VERSION, baudRate = BAUDRATE, sclPort = board.SCL, sdaPort = board.SDA, stepSizeInDegrees = STEP_SIZE_IN_DEGREES):
         # Initialize PortHandler instance
         # Set the port path
         # Get methods and members of PortHandlerLinux or PortHandlerWindows
@@ -108,6 +116,12 @@ class Servo:
         self.adafruitKit.continuous_servo[0].set_pulse_width_range(self.SLIDER_MINIMUM_PWM_PULSE, self.SLIDER_MAXIMUM_PWM_PULSE)
         print("Slider initialized.")
 
+        # Now record the current positions of each servo.
+        self.currentServoAngle = self.getServoAngleMultiple([1,2,3,4,5,6])
+        self.setSliderPosition(0.1) # Sets our initial position.
+
+        self.STEP_SIZE_IN_DEGREES = stepSize
+        self._STEP_SIZE_IN_PULSES = stepSize * self.PULSES_PER_DEGREE_POSITION_CONTROL_MODE
     # Default is velocity drive mode.
     def setDriveMode(self, servoId, driveMode = VELOCITY_DRIVE_MODE):
         dxl_comm_result, dxl_error = self.packetHandler.write1ByteTxRx(self.portHandler, servoId, self.ADDR_DRIVE_MODE, driveMode)
@@ -163,7 +177,7 @@ class Servo:
             return False
         self.groupSyncWritePosition.clearParam()
         return True
-
+    
     def getServoAngleMultiple(self, servoIds):
         # Syncread present position
         allReadsIn = None
@@ -289,5 +303,46 @@ class Servo:
         print("Successfully factory reset")
 
     def setSliderPosition(self, positionRatio):
+        self.currentLinearActuatorPosition = positionRatio
         tmp = 0.78*positionRatio + 0.22 # Linear mapping since an input below 0.22 doesn't really do anything.
         self.adafruitKit.continuous_servo[0].fraction = tmp
+
+    def getSliderPosition(self):
+        return self.currentLinearActuatorPosition
+    
+    def servoSanitizeAngles(self, angles):
+        # We cannot exceed 1023.
+        # We cannot go below 0.
+        assert(len(angles) == 6)
+        for idx, angle in enumerate(angles):
+            if angle > 1023:
+                angles[idx] = 1023
+            elif angle < 0:
+                angles[idx] = 0
+    
+    # Specialized functions for interaction with OpenAI Gym Environments
+
+    def getPulsesPerStep(self):
+        return self._STEP_SIZE_IN_PULSES
+
+    def servoUnitStep(self, actionArray):
+        # actionArray is an array of 6 elements, each of which is either 0 or 1.
+        # 0 means clockwise, 1 means counterclockwise.
+        # We will take the current servo position, and add 1 degree to each servo that has action = 0, and subtract 1 degree from each servo that has action = 1
+        # Then we will send the new servo positions to the servos.
+        # We will also return the new servo positions.
+
+        # 1 pulse = 0.088 degrees.
+        # If we wish to advance by 1 degree, we will have to modify the current value by 11.36 pulses.
+        # We will use 11 since we have to deal with integers.
+        assert(len(actionArray) == 6)
+        newServoPositions = numpy.zeros(6)
+        for idx, action in enumerate(actionArray):
+            if action == 0:
+                newServoPositions[idx] = self.currentServoAngle[idx] + self.getPulsesPerStep()
+            else:
+                newServoPositions[idx] = self.currentServoAngle[idx] - self.getPulsesPerStep()
+        self.servoSanitizeAngles(newServoPositions)
+        self.setServoAngleMultiple([1,2,3,4,5,6], newServoPositions)
+        self.currentServoAngle = newServoPositions
+        return newServoPositions
