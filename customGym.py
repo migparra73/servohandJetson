@@ -1,6 +1,6 @@
 import numpy as np
-import gym
-from gym import utils, spaces
+import gymnasium as gym
+from gymnasium import utils, spaces
 from math import exp
 import servo
 from typing import Type
@@ -30,8 +30,8 @@ class PhysicalServoHand(gym.Env, utils.EzPickle):
         self._max_reward= max_reward
         self._max_1= max1
         self._max_2= max2
-        self._posstd=posstd
-        self._volstd=volstd
+        #self._posstd=posstd
+        #self._volstd=volstd
         self._ij=i
         self.face_id=nn
         self._obs_mean = obs_mean
@@ -39,7 +39,7 @@ class PhysicalServoHand(gym.Env, utils.EzPickle):
         self._exclude_current_positions_from_observation = (
             exclude_current_positions_from_observation)
         
-        self.action_space = gym.spaces.MultiBinary(7) # Each one is mapped to "back" or "forward" (or in the case of the linear actuator, up/down)
+        self.action_space = gym.spaces.MultiBinary(6) # Each one is mapped to "back" or "forward" (or in the case of the linear actuator, up/down)
         self.servo_driver = servoDriver
         self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(1,), dtype=np.float32) # The observation space is a single float, which is the height of the ball.
 
@@ -62,11 +62,9 @@ class PhysicalServoHand(gym.Env, utils.EzPickle):
         z_position_after = 10 * np.random.rand(1) #ball position? - use openCV
 
 
-        y_velocity = ((y_position_after - y_position_before)
-                      / self.dt)
+        #y_velocity = ((y_position_after - y_position_before) / self.dt)
     
-        z_velocity = ((z_position_after - z_position_before)
-                      / self.dt)
+        #z_velocity = ((z_position_after - z_position_before) / self.dt)
 
         ctrl_cost = self.control_cost(action)
 
@@ -88,14 +86,12 @@ class PhysicalServoHand(gym.Env, utils.EzPickle):
         
         # forward_reward = rot_weight*(self._forward_reward_weight * y_velocity) - lift_weight*(95*abs(z_position_after-0.06))
         forward_reward =  lift_weight*(95*abs(z_position_after-0.06)) ## only height reward
-
-
         
         height=z_position_before
 
         height_reward=-(95*abs(z_position_after-0.06))
 
-        rotation_reward=(self._forward_reward_weight * y_velocity)
+#        rotation_reward=(self._forward_reward_weight * y_velocity)
 
         degree_pos= y_position_after
         
@@ -115,16 +111,18 @@ class PhysicalServoHand(gym.Env, utils.EzPickle):
         done = False
         info = {
             'y_position': y_position_after,
-            'y_velocity': y_velocity,
+#            'y_velocity': y_velocity,
 
             'reward_run': forward_reward,
             'reward_ctrl': -ctrl_cost,
             'height_reward':height_reward
         }
 
-        return observation, reward, done, info, height, rotation_reward,height_reward,degree_pos 
+        return observation, reward, done, info, height, height_reward,degree_pos 
 
     
     def get_obs(self):
+       return 0
 
     def reset_model(self):
+       return 0

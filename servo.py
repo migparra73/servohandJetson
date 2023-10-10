@@ -67,8 +67,8 @@ class Servo:
 
     _STEP_SIZE_IN_PULSES = STEP_SIZE_IN_DEGREES * PULSES_PER_DEGREE_POSITION_CONTROL_MODE
 
-    currentServoAngle = numpy.zeros(6)
-    currentLinearActuatorPosition = numpy.zeros(1)
+    currentServoAngle = [0] * 6
+    currentLinearActuatorPosition = [0] * 6
 
     def __init__(self, deviceName=DEVICENAME, protoVersion=PROTOCOL_VERSION, baudRate = BAUDRATE, sclPort = board.SCL, sdaPort = board.SDA, stepSizeInDegrees = STEP_SIZE_IN_DEGREES):
         # Initialize PortHandler instance
@@ -117,11 +117,10 @@ class Servo:
         print("Slider initialized.")
 
         # Now record the current positions of each servo.
-        self.currentServoAngle = self.getServoAngleMultiple([1,2,3,4,5,6])
-        self.setSliderPosition(0.1) # Sets our initial position.
+        self.setSliderPosition(1.0) # Sets our initial position.
 
-        self.STEP_SIZE_IN_DEGREES = stepSize
-        self._STEP_SIZE_IN_PULSES = stepSize * self.PULSES_PER_DEGREE_POSITION_CONTROL_MODE
+        self.STEP_SIZE_IN_DEGREES = stepSizeInDegrees
+        self._STEP_SIZE_IN_PULSES = stepSizeInDegrees * self.PULSES_PER_DEGREE_POSITION_CONTROL_MODE
     # Default is velocity drive mode.
     def setDriveMode(self, servoId, driveMode = VELOCITY_DRIVE_MODE):
         dxl_comm_result, dxl_error = self.packetHandler.write1ByteTxRx(self.portHandler, servoId, self.ADDR_DRIVE_MODE, driveMode)
@@ -313,7 +312,6 @@ class Servo:
     def servoSanitizeAngles(self, angles):
         # We cannot exceed 1023.
         # We cannot go below 0.
-        assert(len(angles) == 6)
         for idx, angle in enumerate(angles):
             if angle > 1023:
                 angles[idx] = 1023
@@ -326,8 +324,9 @@ class Servo:
         return self._STEP_SIZE_IN_PULSES
 
     def servoUnitStep(self, actionArray):
-        # actionArray is an array of 6 elements, each of which is either 0 or 1.
+        # actionArray is an array of 7 elements, each of which is either 0 or 1.
         # 0 means clockwise, 1 means counterclockwise.
+        # Last element is the linear actuator
         # We will take the current servo position, and add 1 degree to each servo that has action = 0, and subtract 1 degree from each servo that has action = 1
         # Then we will send the new servo positions to the servos.
         # We will also return the new servo positions.
@@ -335,8 +334,7 @@ class Servo:
         # 1 pulse = 0.088 degrees.
         # If we wish to advance by 1 degree, we will have to modify the current value by 11.36 pulses.
         # We will use 11 since we have to deal with integers.
-        assert(len(actionArray) == 6)
-        newServoPositions = numpy.zeros(6)
+        newServoPositions = [0, 0, 0, 0, 0, 0]
         for idx, action in enumerate(actionArray):
             if action == 0:
                 newServoPositions[idx] = self.currentServoAngle[idx] + self.getPulsesPerStep()
